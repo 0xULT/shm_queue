@@ -47,10 +47,13 @@ consumer_spsc :: proc(t: ^thread.Thread) {
 
 	fmt.println("running consumer - SPSC")
 
+	time.sleep(time.Millisecond * 10)
+
 	// mark when we start
 	start_t := time.now()
 	
 	num := d.num
+	num_polls := 0
 l:	for cnt < num - 1 {
 		switch cnt, err = smq.get(d.q); err {
 		case .none, .empty:
@@ -58,6 +61,7 @@ l:	for cnt < num - 1 {
 	    	fmt.println(err)
 	    	break l
 		}
+		num_polls += 1
 	}
 
 	// mark when we finish
@@ -65,8 +69,9 @@ l:	for cnt < num - 1 {
 
 	fmt.println("done consumer - SPSC")
 
-	fmt.printf("For %d elements it took %f ms (%d/sec) or %f ns/op\n", 
+	fmt.printf("For %d elements (%d polls) it took %f ms (%d/sec) or %f ns/op\n", 
 		num, 
+		num_polls,
 		time.duration_milliseconds(run_time), 
 		num*1e9/time.duration_nanoseconds(run_time),
 		f64(time.duration_nanoseconds(run_time))/f64(num)  )
@@ -81,10 +86,13 @@ consumer_mpmc :: proc(t: ^thread.Thread) {
 
 	fmt.println("running consumer - MPMC")
 
+	time.sleep(time.Millisecond * 10)
+
 	// mark when we start
 	start_t := time.now()
 	
 	num := d.num
+	num_polls := 0
 l:	for cnt < num - 1 {
 		switch cnt, err = smq.get(d.q); err {
 		case .none, .empty:
@@ -92,6 +100,7 @@ l:	for cnt < num - 1 {
 	    	fmt.println(err)
 	    	break l
 		}
+		num_polls += 1
 	}
 
 	// mark when we finish
@@ -99,28 +108,29 @@ l:	for cnt < num - 1 {
 
 	fmt.println("done consumer - MPMC")
 
-	fmt.printf("For %d elements it took %f ms (%d/sec or %f ns/op)\n", 
+	fmt.printf("For %d elements (%d polls) it took %f ms (%d/sec or %f ns/op)\n", 
 		num, 
+		num_polls,
 		time.duration_milliseconds(run_time), 
 		num*1e9/time.duration_nanoseconds(run_time),
 		f64(time.duration_nanoseconds(run_time))/f64(num) )
 }
 
 time_spsc :: proc(num: i64) {
-	q := smq.new_spsc(i64, 100_000)
+	q := smq.new_spsc(i64, 5_000_000)
 	defer smq.free(q)
 
-	time_transfers(q, num, producer_spsc, consumer_spsc)
+	time_transfers(q, num,"starting SPSC timing tests" , producer_spsc, consumer_spsc)
 }
 
 time_mpmc :: proc(num: i64) {
-	q := smq.new_mpmc(i64, 100_000)
+	q := smq.new_mpmc(i64, 5_000_000)
 	defer smq.free(q)
 
-	time_transfers(q, num, producer_mpmc, consumer_mpmc)
+	time_transfers(q, num,"starting MPMC timing tests", producer_mpmc, consumer_mpmc)
 }
 
-time_transfers :: proc(q: $T, num: i64, consumer_proc, producer_proc: proc(t: ^thread.Thread)) {
+time_transfers :: proc(q: $T, num: i64,title: string, consumer_proc, producer_proc: proc(t: ^thread.Thread)) {
 	threads := make([dynamic]^thread.Thread, 0, 2)
 	defer delete(threads)
 
@@ -150,7 +160,7 @@ time_transfers :: proc(q: $T, num: i64, consumer_proc, producer_proc: proc(t: ^t
 		thread.start(t)
 	}
 
-	fmt.println("starting spsc timing test")
+		fmt.println(title)
 
 	for len(threads) > 0 {
 		for i := 0; i < len(threads); {
